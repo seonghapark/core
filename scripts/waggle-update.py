@@ -68,7 +68,7 @@ def collect_info():
 			meta[repo+'_ver'] = 'unknown'
 	return meta
 
-def get_update_info(node_id, meta, beehive_url='http://beehive1.mcs.anl.gov/update/'):
+def get_update_info(node_id, meta, beehive_url='http://beehive1.mcs.anl.gov/api/1/update/'):
 	meta_json = ''
 	if isinstance(meta, dict) or isinstance(meta, list):
 		meta_json = json.dumps(meta)
@@ -77,19 +77,21 @@ def get_update_info(node_id, meta, beehive_url='http://beehive1.mcs.anl.gov/upda
 	else:
 		raise ValueError("unsupported type")
 
-	cmd = 'curl -s --connect-timeout 10 --retry 5 --retry-delay 10 -H "Content-Type: application/json" -X POST -d %s %s%s' % (meta_json, beehive_url, node_id)
+	cmd = 'curl -s --connect-timeout 10 --retry 5 --retry-delay 10 -H "Content-Type: application/json" -X POST -d \'%s\' %s%s' % (meta_json, beehive_url, node_id)
+	print(cmd)
 	ret = do_command(cmd)
 	return ret
 
 def download(url, path='/tmp/'):
 	os.system('mkdir -p %s' % path)
-	path += '/' + os.path.basename(url)
+	path += os.path.basename(url)
 	os.system('wget -q -O %s %s' % (path, url))
 	return path
 
 
 def perform_update(repo, update_url, base_path='/usr/lib/waggle/patches/'):
 	being_updated(True)
+	logging.info('%s is being updated' % repo)
 
 	# Download the patch
 	path = download(update_url, path=base_path)
@@ -103,16 +105,14 @@ def perform_update(repo, update_url, base_path='/usr/lib/waggle/patches/'):
 		ret = os.system('%s/update.sh' % unzip_path)
 		if ret != 0:
 			raise Exception('%s update failed:Error code %d' % (repo, ret))
-	elif '.sh' in path:
-		os.system('chmod +x %s' % path)
-		os.system('%s' % path)
 	else:
 		raise ValueError('unrecognized patch file')
 
+	logging.info('%s has been updated' % repo)
 	being_updated(False)
 
 if __name__ == '__main__':
-	base_sleep_duration = 60*60*24 # 1 min
+	base_sleep_duration = 60*60*24 # 1 day
 	logging.info("waggle-update service initiated...")
 
 	while True:
@@ -121,7 +121,7 @@ if __name__ == '__main__':
 
 		# Request update info
 		try:
-			update_check = get_update_info(info['node_id'], info)
+			update_check = get_update_info(info['node_id'], info) #, beehive_url='http://localhost:5000/api/1/update/')
 		except Exception as e:
 			update_check = ''
 			logging.error("Failed to get update info: %s" % str(e))
