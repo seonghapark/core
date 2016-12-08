@@ -1,0 +1,12 @@
+[Unit]
+Description=Waggle update agent.
+After=network.target
+
+[Service]
+ExecStart=/usr/lib/waggle/core/scripts/waggle-update.py
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

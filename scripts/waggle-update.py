@@ -55,6 +55,10 @@ def collect_info():
 		repo_list.remove('SSL')
 	except:
 		pass
+	try:
+		repo_list.remove('patches')
+	except:
+		pass
 
 	for repo in repo_list:
 		ver = get_version(repo)
@@ -78,26 +82,37 @@ def get_update_info(node_id, meta, beehive_url='http://beehive1.mcs.anl.gov/upda
 	return ret
 
 def download(url, path='/tmp/'):
-	path = path + str(uuid.uuid4())
 	os.system('mkdir -p %s' % path)
 	path += '/' + os.path.basename(url)
 	os.system('wget -q -O %s %s' % (path, url))
 	return path
 
 
-def perform_update(repo, update_url, base_path='/usr/lib/waggle/'):
+def perform_update(repo, update_url, base_path='/usr/lib/waggle/patches/'):
 	being_updated(True)
 
 	# Download the patch
-	path = download(update_url)
+	path = download(update_url, path=base_path)
 	logging.info(path)
 
 	# Run the patch
+	if '.tar.gz' in path:
+		unzip_path = '/tmp/' + str(uuid.uuid4())
+		os.system('tar -zxf %s -C %s' % (os.path.basename(path), unzip_path))
+		os.system('chmod +x %s/update.sh' % unzip_path)
+		ret = os.system('%s/update.sh' % unzip_path)
+		if ret != 0:
+			raise Exception('%s update failed:Error code %d' % (repo, ret))
+	elif '.sh' in path:
+		os.system('chmod +x %s' % path)
+		os.system('%s' % path)
+	else:
+		raise ValueError('unrecognized patch file')
 
 	being_updated(False)
 
 if __name__ == '__main__':
-	base_sleep_duration = 60 # 1 min
+	base_sleep_duration = 60*60*24 # 1 min
 	logging.info("waggle-update service initiated...")
 
 	while True:
@@ -112,7 +127,7 @@ if __name__ == '__main__':
 			logging.error("Failed to get update info: %s" % str(e))
 
 		# for test
-		update_check = json.dumps({'core_ver': 'v2.1.1', 'core_ver_url':'https://raw.githubusercontent.com/waggle-sensor/waggle/master/README.md'})
+		# update_check = json.dumps({'core_ver': 'v2.1.1', 'core_ver_url':'https://raw.githubusercontent.com/waggle-sensor/waggle/master/README.md'})
 
 		# Check if update is needed
 		update_list = []
@@ -142,6 +157,9 @@ if __name__ == '__main__':
 		# Perform updates
 		if update_list != []:
 			for repo, url in update_list:
-				perform_update(repo.replace('_ver', ''), url)
+				try:
+					perform_update(repo.replace('_ver', ''), url)
+				except Exception as e:
+					logging.error('Failed to perform update %s:%s' % (repo, str(e)))
 
 		time.sleep(base_sleep_duration)
