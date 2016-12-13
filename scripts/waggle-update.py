@@ -50,6 +50,9 @@ def collect_info():
 	meta['node_id'] = get_node_id()
 	meta['node_model'] = get_node_model()
 
+	if not os.path.isdir('/usr/lib/waggle/'):
+		return meta
+
 	repo_list = os.listdir('/usr/lib/waggle/')
 	try:
 		repo_list.remove('SSL')
@@ -85,24 +88,27 @@ def get_update_info(node_id, meta, beehive_url='http://beehive1.mcs.anl.gov/api/
 def download(url, path='/tmp/'):
 	os.system('mkdir -p %s' % path)
 	path += os.path.basename(url)
-	os.system('wget -q -O %s %s' % (path, url))
+	ret = os.system('wget -q -O %s %s' % (path, url))
+	if ret != 0:
+		raise Exception('Failed to download patch file %s' % (url))
 	return path
 
 
-def perform_update(repo, update_url, base_path='/usr/lib/waggle/patches/'):
+def perform_update(repo, update_url, base_path='/usr/lib/waggle/'):
 	being_updated(True)
 	logging.info('%s is being updated' % repo)
 
 	# Download the patch
-	path = download(update_url, path=base_path)
+	path = download(update_url, path=base_path+'patches/')
 	logging.info(path)
 
 	# Run the patch
 	if '.tar.gz' in path:
 		unzip_path = '/tmp/' + str(uuid.uuid4())
-		os.system('tar -zxf %s -C %s' % (os.path.basename(path), unzip_path))
+		os.system('mkdir -p %s' % unzip_path)
+		os.system('tar -zxf %s -C %s' % (path, unzip_path))
 		os.system('chmod +x %s/update.sh' % unzip_path)
-		ret = os.system('%s/update.sh' % unzip_path)
+		ret = os.system('cd %s; %s/update.sh' % (base_path+repo, unzip_path))
 		if ret != 0:
 			raise Exception('%s update failed:Error code %d' % (repo, ret))
 	else:
@@ -121,13 +127,10 @@ if __name__ == '__main__':
 
 		# Request update info
 		try:
-			update_check = get_update_info(info['node_id'], info) #, beehive_url='http://localhost:5000/api/1/update/')
+			update_check = get_update_info(info['node_id'], info)
 		except Exception as e:
 			update_check = ''
 			logging.error("Failed to get update info: %s" % str(e))
-
-		# for test
-		# update_check = json.dumps({'core_ver': 'v2.1.1', 'core_ver_url':'https://raw.githubusercontent.com/waggle-sensor/waggle/master/README.md'})
 
 		# Check if update is needed
 		update_list = []
